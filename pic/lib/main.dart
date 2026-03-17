@@ -80,6 +80,9 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
   final _rng = Random();
   Timer? _timer;
   StreamSubscription<Position>? _positionSub;
+  String _patientName = 'John Doe';
+  int _patientAge = 45;
+  String _patientSex = 'Male';
   bool _isMonitoring = true;
   bool _gpsReady = false;
   String? _gpsError;
@@ -238,6 +241,88 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
     await launchUrl(mapsUri, mode: LaunchMode.externalApplication);
   }
 
+  Future<void> _editPatientDetails() async {
+    final nameCtrl = TextEditingController(text: _patientName);
+    final ageCtrl = TextEditingController(text: _patientAge.toString());
+    String selectedSex = _patientSex;
+
+    final result = await showDialog<(String, int, String)>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogCtx, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF0D1426),
+          title: const Text('Edit Patient', style: TextStyle(color: Colors.white)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'Name',
+                  labelStyle: TextStyle(color: Colors.grey),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ageCtrl,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'Age',
+                  labelStyle: TextStyle(color: Colors.grey),
+                ),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: selectedSex,
+                dropdownColor: const Color(0xFF0D1426),
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'Sex',
+                  labelStyle: TextStyle(color: Colors.grey),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'Male', child: Text('Male')),
+                  DropdownMenuItem(value: 'Female', child: Text('Female')),
+                  DropdownMenuItem(value: 'Other', child: Text('Other')),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  setDialogState(() => selectedSex = value);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final parsedAge = int.tryParse(ageCtrl.text.trim());
+                final parsedName = nameCtrl.text.trim();
+                if (parsedName.isEmpty || parsedAge == null || parsedAge <= 0) {
+                  return;
+                }
+                Navigator.of(dialogCtx).pop((parsedName, parsedAge, selectedSex));
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result == null || !mounted) return;
+    setState(() {
+      _patientName = result.$1;
+      _patientAge = result.$2;
+      _patientSex = result.$3;
+    });
+  }
+
   // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
@@ -332,16 +417,21 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
             child: const Icon(Icons.person, color: Color(0xFF00B4D8), size: 26),
           ),
           const SizedBox(width: 12),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('John Doe',
+                Text(_patientName,
                     style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                Text('ID: #10291  ·  Age: 45  ·  Male',
+                Text('Age: $_patientAge  ·  $_patientSex',
                     style: TextStyle(color: Colors.grey, fontSize: 11)),
               ],
             ),
+          ),
+          IconButton(
+            onPressed: _editPatientDetails,
+            icon: const Icon(Icons.edit, color: Color(0xFF00B4D8), size: 18),
+            tooltip: 'Edit patient',
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
