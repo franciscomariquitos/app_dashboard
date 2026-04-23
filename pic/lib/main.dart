@@ -174,37 +174,21 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
         warningMax: 120,
         history: List.generate(20, (_) => 65 + _rng.nextDouble() * 15),
       ),
-      VitalSign(
-        name: 'Temperature',
-        unit: '°C',
-        icon: Icons.thermostat,
-        color: const Color(0xFFFF9F1C),
-        value: 36.6,
-        normalMin: 36.1,
-        normalMax: 37.2,
-        warningMin: 35.5,
-        warningMax: 38.5,
-        history: List.generate(20, (_) => 36.1 + _rng.nextDouble() * 0.8),
-      ),
     ];
   }
 
   void _tick() {
     const deltas = {
       'Heart Rate': (45.0, 160.0, 4.0),
-      'Temperature': (35.0, 40.0, 0.1),
     };
 
     for (final sign in _signs) {
       final cfg = deltas[sign.name];
       if (cfg == null) continue;
       final (min, max, step) = cfg;
-      double v = sign.value + (_rng.nextDouble() - 0.5) * step;
-      if (sign.name == 'Temperature') {
-        v = double.parse(v.clamp(min, max).toStringAsFixed(1));
-      } else {
-        v = v.clamp(min, max).roundToDouble();
-      }
+      final v = (sign.value + (_rng.nextDouble() - 0.5) * step)
+          .clamp(min, max)
+          .roundToDouble();
       sign.value = v;
       sign.history.add(v);
       if (sign.history.length > 30) sign.history.removeAt(0);
@@ -375,9 +359,9 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
           Expanded(
             child: GridView.builder(
               padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                childAspectRatio: 1.05,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: _signs.length == 1 ? 1 : 2,
+                childAspectRatio: _signs.length == 1 ? 1.8 : 1.05,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
               ),
