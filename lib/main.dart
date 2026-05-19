@@ -7,9 +7,65 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Supabase.initialize(
+    url: 'https://mrykxcnzjguytvbvkztf.supabase.co',
+    anonKey: 'sb_publishable_tSZ4o4cEupPdJ40bUUbQFQ_r0mLPa57',
+  );
   runApp(const VitalSignsApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      title: 'Todos',
+      home: HomePage(),
+    );
+  }
+}
+
+class HomePage extends StatefulWidget {
+  const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  final _future = Supabase.instance.client
+      .from('todos')
+      .select();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: FutureBuilder(
+        future: _future,
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final todos = snapshot.data!;
+          return ListView.builder(
+            itemCount: todos.length,
+            itemBuilder: ((context, index) {
+              final todo = todos[index];
+              return ListTile(
+                title: Text(todo['name']),
+              );
+            }),
+          );
+        },
+      ),
+    );
+  }
 }
 
 // ── Data model ────────────────────────────────────────────────────────────────
@@ -81,8 +137,11 @@ class VitalSignsDashboard extends StatefulWidget {
 
 class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
   final _rng = Random();
+  final _uuid = const Uuid();
+  final _supabase = Supabase.instance.client;
 
   Timer? _timer;
+  Timer? _syncTimer;
   StreamSubscription<Position>? _positionSub;
 
   String _patientName = 'John Doe';
@@ -90,6 +149,7 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
   String _patientSex = 'Male';
 
   bool _isMonitoring = true;
+  bool _isSavingToSupabase = false;
   bool _gpsReady = false;
   String? _gpsError;
   Position? _currentPosition;
@@ -128,11 +188,18 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
         });
       }
     });
+
+    _syncTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (_isMonitoring) {
+        _saveTrackerData(showFeedback: false);
+      }
+    });
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _syncTimer?.cancel();
     _positionSub?.cancel();
     _scanSub?.cancel();
     _bleSub?.cancel();
@@ -385,6 +452,70 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
         VitalStatus.warning => 'ATTENTION',
         VitalStatus.danger => 'CRITICAL',
       };
+
+  String get _databaseStatus => switch (_overallStatus) {
+        VitalStatus.normal => 'healthy',
+        VitalStatus.warning => 'danger',
+        VitalStatus.danger => 'critical',
+      };
+
+  Future<void> _saveTrackerData({bool showFeedback = true}) async {
+    if (_isSavingToSupabase) return;
+
+    final pos = _currentPosition;
+    final locationName = pos == null
+        ? 'Unknown location'
+        : '${pos.latitude.toStringAsFixed(6)}, ${pos.longitude.toStringAsFixed(6)}';
+
+    setState(() => _isSavingToSupabase = true);
+
+    try {
+      final rowId = _uuid.v4();
+      final updatedAt = DateTime.now().toUtc().toIso8601String();
+      final inserted = await _supabase.from('tracker_data').insert({
+        'id': rowId,
+        'person_name': _patientName,
+        'status': _databaseStatus,
+        'latitude': pos?.latitude,
+        'longitude': pos?.longitude,
+        'location_name': locationName,
+        'updated_at': updatedAt,
+      }).select().single();
+
+      if (!mounted) return;
+      if (showFeedback) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Tracker saved. id: ${inserted['id']}',
+            ),
+          ),
+        );
+      }
+    } on PostgrestException catch (e) {
+      if (!mounted) return;
+      final detailsText = e.details?.toString() ?? '';
+      final detail = detailsText.isEmpty ? '' : ' Details: $detailsText';
+      final hint = e.hint == null || e.hint!.isEmpty
+          ? ''
+          : ' Hint: ${e.hint}';
+      if (showFeedback) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Supabase error: ${e.message}$detail$hint')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      if (showFeedback) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send tracker data: $e')),
+        );
+      }
+    } finally {
+      if (!mounted) return;
+      setState(() => _isSavingToSupabase = false);
+    }
+  }
 
   Future<void> _openCurrentLocationInMaps() async {
     final pos = _currentPosition;
