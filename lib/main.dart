@@ -106,19 +106,33 @@ class VitalSign {
 
 // ── App root ──────────────────────────────────────────────────────────────────
 
+// ── NAVISense brand colours ───────────────────────────────────────────────────
+class _NS {
+  static const bg          = Color(0xFF05041A);
+  static const bgCard      = Color(0xFF0A0D2E);
+  static const bgCardDeep  = Color(0xFF080B26);
+  static const accent      = Color(0xFF4CC9F0);
+  static const accentPurple= Color(0xFF7B5EA7);
+  static const border      = Color(0xFF1E2A6E);
+  static const borderAccent= Color(0xFF4CC9F0);
+  static const textSub     = Color(0xFF8892B0);
+  static const live        = Color(0xFF57CC99);
+}
+
 class VitalSignsApp extends StatelessWidget {
   const VitalSignsApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Vital Signs Monitor',
+      title: 'NAVISense',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF0077B6),
+          seedColor: const Color(0xFF4CC9F0),
           brightness: Brightness.dark,
         ),
+        fontFamily: 'Arial',
         useMaterial3: true,
       ),
       home: const VitalSignsDashboard(),
@@ -537,7 +551,7 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (dialogCtx, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF0D1426),
+          backgroundColor: _NS.bgCardDeep,
           title: const Text(
             'Edit Patient',
             style: TextStyle(color: Colors.white),
@@ -621,19 +635,51 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E1A),
+      backgroundColor: _NS.bg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0D1426),
-        title: const Row(
+        backgroundColor: const Color(0xFF07092A),
+        elevation: 0,
+        titleSpacing: 16,
+        title: Row(
           children: [
-            Icon(Icons.monitor_heart, color: Color(0xFF00B4D8), size: 26),
-            SizedBox(width: 8),
-            Text(
-              'Vital Signs Monitor',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
+            // Hexagonal NAVISense logo mark
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: _NS.accent, width: 1.5),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1A0A6B), Color(0xFF0A0D2E)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: const Icon(Icons.sensors, color: _NS.accent, size: 16),
+            ),
+            const SizedBox(width: 10),
+            RichText(
+              text: const TextSpan(
+                children: [
+                  TextSpan(
+                    text: 'NAVI',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 17,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  TextSpan(
+                    text: 'Sense',
+                    style: TextStyle(
+                      color: _NS.accent,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 17,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -645,9 +691,7 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
                   ? Icons.bluetooth_connected
                   : Icons.bluetooth,
             ),
-            color: _bluetoothConnected
-                ? const Color(0xFF57CC99)
-                : const Color(0xFF00B4D8),
+            color: _bluetoothConnected ? _NS.live : _NS.accent,
             onPressed: _bluetoothConnected
                 ? _disconnectBluetooth
                 : _connectBluetooth,
@@ -656,31 +700,60 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
             padding: const EdgeInsets.only(right: 4),
             child: Row(
               children: [
-                Text(
-                  _isMonitoring ? 'LIVE' : 'PAUSED',
-                  style: TextStyle(
-                    color: _isMonitoring
-                        ? const Color(0xFF57CC99)
-                        : Colors.grey,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
+                if (_isMonitoring)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: _NS.live.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: _NS.live.withOpacity(0.4)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _PulseDot(),
+                        const SizedBox(width: 4),
+                        const Text(
+                          'LIVE LINK',
+                          style: TextStyle(
+                            color: _NS.live,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  const Text(
+                    'PAUSED',
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 11,
+                    ),
                   ),
-                ),
-                if (_isMonitoring) ...[
-                  const SizedBox(width: 4),
-                  _PulseDot(),
-                ],
               ],
             ),
           ),
           IconButton(
             icon: Icon(_isMonitoring ? Icons.pause_circle : Icons.play_circle),
-            color: const Color(0xFF00B4D8),
+            color: _NS.accent,
             onPressed: () => setState(() => _isMonitoring = !_isMonitoring),
           ),
         ],
       ),
-      body: Column(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF07092A), Color(0xFF05041A), Color(0xFF050318)],
+            stops: [0.0, 0.5, 1.0],
+          ),
+        ),
+        child: Column(
         children: [
           _buildPatientBanner(),
           _buildBluetoothCard(),
@@ -704,10 +777,11 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
               'Last updated: ${_lastUpdated.hour.toString().padLeft(2, '0')}:'
               '${_lastUpdated.minute.toString().padLeft(2, '0')}:'
               '${_lastUpdated.second.toString().padLeft(2, '0')}',
-              style: const TextStyle(color: Colors.grey, fontSize: 11),
+              style: const TextStyle(color: _NS.textSub, fontSize: 11),
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -717,12 +791,12 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF0D1426),
+        color: _NS.bgCard,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: _bluetoothConnected
-              ? const Color(0xFF57CC99).withOpacity(0.5)
-              : const Color(0xFF0077B6).withOpacity(0.35),
+              ? _NS.live.withOpacity(0.5)
+              : _NS.border,
         ),
       ),
       child: Row(
@@ -731,9 +805,7 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
             _bluetoothConnected
                 ? Icons.bluetooth_connected
                 : Icons.bluetooth,
-            color: _bluetoothConnected
-                ? const Color(0xFF57CC99)
-                : const Color(0xFF00B4D8),
+            color: _bluetoothConnected ? _NS.live : _NS.accent,
             size: 20,
           ),
           const SizedBox(width: 8),
@@ -750,8 +822,11 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
             style: ElevatedButton.styleFrom(
               backgroundColor: _bluetoothConnected
                   ? const Color(0xFFE63946)
-                  : const Color(0xFF0077B6),
-              foregroundColor: Colors.white,
+                  : _NS.accent.withOpacity(0.15),
+              foregroundColor: _bluetoothConnected ? Colors.white : _NS.accent,
+              side: _bluetoothConnected
+                  ? null
+                  : const BorderSide(color: _NS.accent, width: 1),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             ),
             child: Text(_bluetoothConnected ? 'Disconnect' : 'Connect'),
@@ -766,58 +841,105 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
 
     return Container(
       margin: const EdgeInsets.all(12),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF0D1426),
+        color: _NS.bgCard,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF0077B6).withOpacity(0.4)),
+        border: Border.all(color: _NS.border),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: const Color(0xFF0077B6).withOpacity(0.25),
-            child: const Icon(Icons.person, color: Color(0xFF00B4D8), size: 26),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _patientName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                  ),
-                ),
-                Text(
-                  'Age: $_patientAge  ·  $_patientSex',
-                  style: const TextStyle(color: Colors.grey, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            onPressed: _editPatientDetails,
-            icon: const Icon(Icons.edit, color: Color(0xFF00B4D8), size: 18),
-            tooltip: 'Edit patient',
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          // Badge label row
+          Row(
             children: [
-              Text(
-                _overallLabel,
-                style: TextStyle(
-                  color: overallColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _NS.accent.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: _NS.accent.withOpacity(0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(width: 5, height: 5,
+                      decoration: const BoxDecoration(
+                        color: _NS.accent, shape: BoxShape.circle)),
+                    const SizedBox(width: 5),
+                    const Text(
+                      'WEARABLE LAYER',
+                      style: TextStyle(
+                        color: _NS.accent,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const Text(
-                'Overall',
-                style: TextStyle(color: Colors.grey, fontSize: 11),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: _NS.accent.withOpacity(0.1),
+                child: const Icon(Icons.person, color: _NS.accent, size: 26),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _patientName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                    Text(
+                      'Age: $_patientAge  ·  $_patientSex',
+                      style: const TextStyle(color: _NS.textSub, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: _editPatientDetails,
+                icon: const Icon(Icons.edit, color: _NS.accent, size: 18),
+                tooltip: 'Edit patient',
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: overallColor.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: overallColor.withOpacity(0.4)),
+                    ),
+                    child: Text(
+                      _overallLabel,
+                      style: TextStyle(
+                        color: overallColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 10,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  const Text(
+                    'Overall',
+                    style: TextStyle(color: _NS.textSub, fontSize: 10),
+                  ),
+                ],
               ),
             ],
           ),
@@ -833,22 +955,40 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF0D1426),
+        color: _NS.bgCard,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF0077B6).withOpacity(0.35)),
+        border: Border.all(color: _NS.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.location_on, color: Color(0xFF00B4D8), size: 18),
-              SizedBox(width: 8),
-              Text(
+              const Icon(Icons.location_on, color: _NS.accent, size: 18),
+              const SizedBox(width: 8),
+              const Text(
                 'GPS Tracking',
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: _NS.accentPurple.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: _NS.accentPurple.withOpacity(0.4)),
+                ),
+                child: const Text(
+                  'ANDROID BRIDGE',
+                  style: TextStyle(
+                    color: _NS.accentPurple,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.6,
+                  ),
                 ),
               ),
             ],
@@ -862,7 +1002,7 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
           else if (!_gpsReady || pos == null)
             const Text(
               'Getting GPS location...',
-              style: TextStyle(color: Colors.grey, fontSize: 12),
+              style: TextStyle(color: _NS.textSub, fontSize: 12),
             )
           else
             Column(
@@ -878,8 +1018,9 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
                   icon: const Icon(Icons.map, size: 16),
                   label: const Text('Show on Maps'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0077B6),
-                    foregroundColor: Colors.white,
+                    backgroundColor: _NS.accent.withOpacity(0.12),
+                    foregroundColor: _NS.accent,
+                    side: const BorderSide(color: _NS.accent, width: 1),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
                       vertical: 8,
@@ -931,12 +1072,12 @@ class _VitalCard extends StatelessWidget {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       decoration: BoxDecoration(
-        color: const Color(0xFF0D1426),
+        color: _NS.bgCard,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: sign.status == VitalStatus.danger
               ? const Color(0xFFE63946).withOpacity(0.8)
-              : sign.color.withOpacity(0.3),
+              : _NS.border,
           width: sign.status == VitalStatus.danger ? 2 : 1,
         ),
       ),
