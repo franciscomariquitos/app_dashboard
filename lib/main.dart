@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -109,14 +110,33 @@ class VitalSign {
 // ── NAVISense brand colours ───────────────────────────────────────────────────
 class _NS {
   static const bg          = Color(0xFF05041A);
-  static const bgCard      = Color(0xFF0A0D2E);
-  static const bgCardDeep  = Color(0xFF080B26);
+  static const bgCard      = Color(0x2611173D);
+  static const bgCardDeep  = Color(0x3311173D);
   static const accent      = Color(0xFF4CC9F0);
   static const accentPurple= Color(0xFF7B5EA7);
-  static const border      = Color(0xFF1E2A6E);
+  static const border      = Color(0x662C3E8F);
   static const borderAccent= Color(0xFF4CC9F0);
   static const textSub     = Color(0xFF8892B0);
   static const live        = Color(0xFF57CC99);
+}
+
+BoxDecoration _nsCardDecoration({Color? borderColor}) {
+  return BoxDecoration(
+    gradient: const LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [Color(0x331A2B73), Color(0x1C11173D)],
+    ),
+    borderRadius: BorderRadius.circular(20),
+    border: Border.all(color: borderColor ?? _NS.border.withOpacity(0.7)),
+    boxShadow: const [
+      BoxShadow(
+        color: Color(0x0F000000),
+        blurRadius: 14,
+        offset: Offset(0, 8),
+      ),
+    ],
+  );
 }
 
 class VitalSignsApp extends StatelessWidget {
@@ -124,6 +144,8 @@ class VitalSignsApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final baseTextTheme = GoogleFonts.soraTextTheme();
+
     return MaterialApp(
       title: 'NAVISense',
       debugShowCheckedModeBanner: false,
@@ -132,7 +154,42 @@ class VitalSignsApp extends StatelessWidget {
           seedColor: const Color(0xFF4CC9F0),
           brightness: Brightness.dark,
         ),
-        fontFamily: 'Arial',
+        fontFamily: 'AdobeGothicStdB',
+        textTheme: baseTextTheme.copyWith(
+          displayLarge: GoogleFonts.syne(fontWeight: FontWeight.w600),
+          displayMedium: GoogleFonts.syne(fontWeight: FontWeight.w600),
+          displaySmall: GoogleFonts.syne(fontWeight: FontWeight.w600),
+          headlineLarge: GoogleFonts.syne(fontWeight: FontWeight.w600),
+          headlineMedium: GoogleFonts.syne(fontWeight: FontWeight.w600),
+          headlineSmall: GoogleFonts.syne(fontWeight: FontWeight.w600),
+          titleLarge: GoogleFonts.syne(fontWeight: FontWeight.w600),
+          titleMedium: GoogleFonts.syne(fontWeight: FontWeight.w600),
+          titleSmall: GoogleFonts.syne(fontWeight: FontWeight.w600),
+          bodyLarge: baseTextTheme.bodyLarge?.copyWith(
+            fontFamily: 'AdobeGothicStdB',
+            fontFamilyFallback: const ['Sora', 'sans-serif'],
+          ),
+          bodyMedium: baseTextTheme.bodyMedium?.copyWith(
+            fontFamily: 'AdobeGothicStdB',
+            fontFamilyFallback: const ['Sora', 'sans-serif'],
+          ),
+          bodySmall: baseTextTheme.bodySmall?.copyWith(
+            fontFamily: 'AdobeGothicStdB',
+            fontFamilyFallback: const ['Sora', 'sans-serif'],
+          ),
+          labelLarge: baseTextTheme.labelLarge?.copyWith(
+            fontFamily: 'AdobeGothicStdB',
+            fontFamilyFallback: const ['Sora', 'sans-serif'],
+          ),
+          labelMedium: baseTextTheme.labelMedium?.copyWith(
+            fontFamily: 'AdobeGothicStdB',
+            fontFamilyFallback: const ['Sora', 'sans-serif'],
+          ),
+          labelSmall: baseTextTheme.labelSmall?.copyWith(
+            fontFamily: 'AdobeGothicStdB',
+            fontFamilyFallback: const ['Sora', 'sans-serif'],
+          ),
+        ),
         useMaterial3: true,
       ),
       home: const VitalSignsDashboard(),
@@ -175,9 +232,11 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
 
   final Guid _serviceUuid = Guid("12345678-1234-1234-1234-1234567890ab");
   final Guid _heartRateUuid = Guid("abcd1234-1234-1234-1234-abcdef123456");
+  final Guid _motorIntensityUuid = Guid("dcba4321-1234-1234-1234-abcdef123456");
 
   BluetoothDevice? _esp32Device;
   BluetoothCharacteristic? _heartRateCharacteristic;
+  BluetoothCharacteristic? _motorIntensityCharacteristic;
 
   StreamSubscription<List<ScanResult>>? _scanSub;
   StreamSubscription<List<int>>? _bleSub;
@@ -185,12 +244,14 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
   bool _bluetoothConnected = false;
   bool _bluetoothScanning = false;
   String _bluetoothStatus = 'Bluetooth: disconnected';
+  double _motorIntensity = 40;
 
   @override
   void initState() {
     super.initState();
     _initSigns();
     _initLocationTracking();
+    _saveTrackerData(showFeedback: false);
 
     _timer = Timer.periodic(const Duration(seconds: 2), (_) {
       if (_isMonitoring) {
@@ -259,6 +320,10 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
             for (final service in services) {
               if (service.uuid == _serviceUuid) {
                 for (final characteristic in service.characteristics) {
+                  if (characteristic.uuid == _motorIntensityUuid) {
+                    _motorIntensityCharacteristic = characteristic;
+                  }
+
                   if (characteristic.uuid == _heartRateUuid) {
                     _heartRateCharacteristic = characteristic;
 
@@ -279,6 +344,8 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
                       _bluetoothScanning = false;
                       _bluetoothStatus = 'Bluetooth: connected';
                     });
+
+                    await _sendMotorIntensity(_motorIntensity.round());
 
                     return;
                   }
@@ -351,6 +418,25 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
       _bluetoothScanning = false;
       _bluetoothStatus = 'Bluetooth: disconnected';
     });
+  }
+
+  Future<void> _sendMotorIntensity(int percent) async {
+    final characteristic = _motorIntensityCharacteristic;
+    if (characteristic == null) return;
+
+    final safePercent = percent.clamp(0, 100);
+
+    try {
+      await characteristic.write(
+        utf8.encode('$safePercent'),
+        withoutResponse: false,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _bluetoothStatus = 'Bluetooth: motor write failed';
+      });
+    }
   }
 
   Future<void> _initLocationTracking() async {
@@ -666,7 +752,7 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: 17,
+                      fontSize: 21,
                       letterSpacing: 1,
                     ),
                   ),
@@ -675,7 +761,7 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
                     style: TextStyle(
                       color: _NS.accent,
                       fontWeight: FontWeight.bold,
-                      fontSize: 17,
+                      fontSize: 21,
                       letterSpacing: 1,
                     ),
                   ),
@@ -744,44 +830,40 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
           ),
         ],
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF07092A), Color(0xFF05041A), Color(0xFF050318)],
-            stops: [0.0, 0.5, 1.0],
-          ),
-        ),
-        child: Column(
+      body: Stack(
         children: [
-          _buildPatientBanner(),
-          _buildBluetoothCard(),
-          _buildGpsCard(),
-          Expanded(
-            child: GridView.builder(
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: _signs.length == 1 ? 1 : 2,
-                childAspectRatio: _signs.length == 1 ? 1.8 : 1.05,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
+          const _NsBackground(),
+          Column(
+            children: [
+              _buildPatientBanner(),
+              _buildBluetoothCard(),
+              _buildMotorControlCard(),
+              _buildGpsCard(),
+              Expanded(
+                child: GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: _signs.length == 1 ? 1 : 2,
+                    childAspectRatio: _signs.length == 1 ? 1.8 : 1.05,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                  ),
+                  itemCount: _signs.length,
+                  itemBuilder: (_, i) => _VitalCard(sign: _signs[i]),
+                ),
               ),
-              itemCount: _signs.length,
-              itemBuilder: (_, i) => _VitalCard(sign: _signs[i]),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              'Last updated: ${_lastUpdated.hour.toString().padLeft(2, '0')}:'
-              '${_lastUpdated.minute.toString().padLeft(2, '0')}:'
-              '${_lastUpdated.second.toString().padLeft(2, '0')}',
-              style: const TextStyle(color: _NS.textSub, fontSize: 11),
-            ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'Last updated: ${_lastUpdated.hour.toString().padLeft(2, '0')}:'
+                  '${_lastUpdated.minute.toString().padLeft(2, '0')}:'
+                  '${_lastUpdated.second.toString().padLeft(2, '0')}',
+                  style: const TextStyle(color: _NS.textSub, fontSize: 11),
+                ),
+              ),
+            ],
           ),
         ],
-        ),
       ),
     );
   }
@@ -790,14 +872,8 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: _NS.bgCard,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: _bluetoothConnected
-              ? _NS.live.withOpacity(0.5)
-              : _NS.border,
-        ),
+      decoration: _nsCardDecoration(
+        borderColor: _bluetoothConnected ? _NS.live.withOpacity(0.35) : _NS.border,
       ),
       child: Row(
         children: [
@@ -812,7 +888,7 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
           Expanded(
             child: Text(
               _bluetoothStatus,
-              style: const TextStyle(color: Colors.white, fontSize: 12),
+              style: const TextStyle(color: Colors.white, fontSize: 13),
             ),
           ),
           ElevatedButton(
@@ -821,15 +897,89 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
                 : _connectBluetooth,
             style: ElevatedButton.styleFrom(
               backgroundColor: _bluetoothConnected
-                  ? const Color(0xFFE63946)
-                  : _NS.accent.withOpacity(0.15),
+                  ? const Color(0xCCB42331)
+                  : _NS.accent.withOpacity(0.08),
               foregroundColor: _bluetoothConnected ? Colors.white : _NS.accent,
               side: _bluetoothConnected
                   ? null
-                  : const BorderSide(color: _NS.accent, width: 1),
+                  : const BorderSide(color: Color(0x994CC9F0), width: 1),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             ),
             child: Text(_bluetoothConnected ? 'Disconnect' : 'Connect'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMotorControlCard() {
+    final intensityLabel = '${_motorIntensity.round()}%';
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: _nsCardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.tune, color: _NS.accent, size: 18),
+              const SizedBox(width: 8),
+              const Text(
+                'Motor Intensity',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 17,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _NS.accent.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _NS.accent.withOpacity(0.25)),
+                ),
+                child: Text(
+                  intensityLabel,
+                  style: const TextStyle(
+                    color: _NS.accent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: _NS.accent,
+              inactiveTrackColor: _NS.textSub.withOpacity(0.25),
+              thumbColor: _NS.accent,
+              overlayColor: _NS.accent.withOpacity(0.18),
+              trackHeight: 3.5,
+            ),
+            child: Slider(
+              min: 0,
+              max: 100,
+              divisions: 100,
+              value: _motorIntensity,
+              onChanged: (value) {
+                setState(() => _motorIntensity = value);
+              },
+              onChangeEnd: (value) {
+                _sendMotorIntensity(value.round());
+              },
+            ),
+          ),
+          Text(
+            _bluetoothConnected
+                ? 'Sent to wearable when adjusted.'
+                : 'Connect Bluetooth to apply on device.',
+            style: const TextStyle(color: _NS.textSub, fontSize: 11),
           ),
         ],
       ),
@@ -842,11 +992,7 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
     return Container(
       margin: const EdgeInsets.all(12),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: _NS.bgCard,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _NS.border),
-      ),
+      decoration: _nsCardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -856,9 +1002,9 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: _NS.accent.withOpacity(0.08),
+                  color: _NS.accent.withOpacity(0.05),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: _NS.accent.withOpacity(0.3)),
+                  border: Border.all(color: _NS.accent.withOpacity(0.22)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -886,7 +1032,7 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
             children: [
               CircleAvatar(
                 radius: 22,
-                backgroundColor: _NS.accent.withOpacity(0.1),
+                backgroundColor: _NS.accent.withOpacity(0.07),
                 child: const Icon(Icons.person, color: _NS.accent, size: 26),
               ),
               const SizedBox(width: 12),
@@ -899,12 +1045,12 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        fontSize: 15,
+                        fontSize: 18,
                       ),
                     ),
                     Text(
                       'Age: $_patientAge  ·  $_patientSex',
-                      style: const TextStyle(color: _NS.textSub, fontSize: 11),
+                      style: const TextStyle(color: _NS.textSub, fontSize: 13),
                     ),
                   ],
                 ),
@@ -920,16 +1066,16 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: overallColor.withOpacity(0.12),
+                      color: overallColor.withOpacity(0.08),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: overallColor.withOpacity(0.4)),
+                      border: Border.all(color: overallColor.withOpacity(0.26)),
                     ),
                     child: Text(
                       _overallLabel,
                       style: TextStyle(
                         color: overallColor,
                         fontWeight: FontWeight.bold,
-                        fontSize: 10,
+                        fontSize: 11,
                         letterSpacing: 0.5,
                       ),
                     ),
@@ -954,11 +1100,7 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: _NS.bgCard,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _NS.border),
-      ),
+      decoration: _nsCardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -971,15 +1113,16 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
+                  fontSize: 17,
                 ),
               ),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
-                  color: _NS.accentPurple.withOpacity(0.15),
+                  color: _NS.accentPurple.withOpacity(0.08),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: _NS.accentPurple.withOpacity(0.4)),
+                  border: Border.all(color: _NS.accentPurple.withOpacity(0.26)),
                 ),
                 child: const Text(
                   'ANDROID BRIDGE',
@@ -1002,7 +1145,7 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
           else if (!_gpsReady || pos == null)
             const Text(
               'Getting GPS location...',
-              style: TextStyle(color: _NS.textSub, fontSize: 12),
+              style: TextStyle(color: _NS.textSub, fontSize: 13),
             )
           else
             Column(
@@ -1010,7 +1153,7 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
               children: [
                 Text(
                   'Current: ${pos.latitude.toStringAsFixed(6)}, ${pos.longitude.toStringAsFixed(6)}',
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
                 ),
                 const SizedBox(height: 8),
                 ElevatedButton.icon(
@@ -1018,9 +1161,9 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
                   icon: const Icon(Icons.map, size: 16),
                   label: const Text('Show on Maps'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _NS.accent.withOpacity(0.12),
+                    backgroundColor: _NS.accent.withOpacity(0.06),
                     foregroundColor: _NS.accent,
-                    side: const BorderSide(color: _NS.accent, width: 1),
+                    side: const BorderSide(color: Color(0x994CC9F0), width: 1),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
                       vertical: 8,
@@ -1071,13 +1214,15 @@ class _VitalCard extends StatelessWidget {
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
-      decoration: BoxDecoration(
-        color: _NS.bgCard,
-        borderRadius: BorderRadius.circular(16),
+      decoration: _nsCardDecoration(
+        borderColor: sign.status == VitalStatus.danger
+            ? const Color(0xCCB42331)
+            : _NS.border.withOpacity(0.9),
+      ).copyWith(
         border: Border.all(
           color: sign.status == VitalStatus.danger
-              ? const Color(0xFFE63946).withOpacity(0.8)
-              : _NS.border,
+              ? const Color(0xCCB42331)
+              : _NS.border.withOpacity(0.9),
           width: sign.status == VitalStatus.danger ? 2 : 1,
         ),
       ),
@@ -1093,7 +1238,7 @@ class _VitalCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     sign.name,
-                    style: const TextStyle(color: Colors.grey, fontSize: 11),
+                    style: const TextStyle(color: _NS.textSub, fontSize: 13),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -1103,14 +1248,14 @@ class _VitalCard extends StatelessWidget {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.15),
+                    color: statusColor.withOpacity(0.09),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     _statusLabel(sign.status),
                     style: TextStyle(
                       color: statusColor,
-                      fontSize: 9,
+                      fontSize: 10,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -1127,7 +1272,7 @@ class _VitalCard extends StatelessWidget {
                     color: sign.status == VitalStatus.danger
                         ? const Color(0xFFE63946)
                         : Colors.white,
-                    fontSize: 26,
+                    fontSize: 30,
                     fontWeight: FontWeight.bold,
                     height: 1,
                   ),
@@ -1137,7 +1282,7 @@ class _VitalCard extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: 3),
                   child: Text(
                     sign.unit,
-                    style: const TextStyle(color: Colors.grey, fontSize: 11),
+                    style: const TextStyle(color: _NS.textSub, fontSize: 13),
                   ),
                 ),
               ],
@@ -1145,7 +1290,7 @@ class _VitalCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               'Normal: $normalText',
-              style: const TextStyle(color: Colors.grey, fontSize: 9),
+              style: const TextStyle(color: _NS.textSub, fontSize: 11),
             ),
             const Spacer(),
             SizedBox(
@@ -1232,6 +1377,86 @@ class _SparklinePainter extends CustomPainter {
   bool shouldRepaint(_SparklinePainter oldDelegate) {
     return oldDelegate.values != values;
   }
+}
+
+class _NsBackground extends StatelessWidget {
+  const _NsBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: Stack(
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xFF0A0D35),
+                  Color(0xFF0A0B2A),
+                  Color(0xFF07071E),
+                ],
+                stops: [0.0, 0.45, 1.0],
+              ),
+            ),
+          ),
+          Positioned(
+            top: -120,
+            left: -90,
+            child: Container(
+              width: 420,
+              height: 420,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [Color(0x663AA5FF), Color(0x003AA5FF)],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 60,
+            right: -110,
+            child: Container(
+              width: 460,
+              height: 460,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [Color(0x55385CFF), Color(0x00385CFF)],
+                ),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: CustomPaint(painter: _GridOverlayPainter()),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GridOverlayPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    const gridGap = 38.0;
+    final paint = Paint()
+      ..color = const Color(0x88AFC4FF).withOpacity(0.08)
+      ..strokeWidth = 1;
+
+    for (double x = 0; x <= size.width; x += gridGap) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+
+    for (double y = 0; y <= size.height; y += gridGap) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 // ── Pulsing live indicator dot ────────────────────────────────────────────────
