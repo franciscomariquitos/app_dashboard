@@ -59,6 +59,18 @@ dev_dependencies:
 # The following section is specific to Flutter packages.
 flutter:
 
+  assets:
+    - assets/images/navisense-logo.png
+
+  fonts:
+    - family: Syne
+      fonts:
+        - asset: assets/fonts/Syne-SemiBold.ttf
+          weight: 600
+    - family: AdobeGothicStdB
+      fonts:
+        - asset: assets/fonts/AdobeGothicStd-Bold.otf
+
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.

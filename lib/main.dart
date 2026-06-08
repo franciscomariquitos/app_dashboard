@@ -20,54 +20,7 @@ Future<void> main() async {
   runApp(const VitalSignsApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
 
-  @override
-  Widget build(BuildContext context) {
-    return const MaterialApp(
-      title: 'Todos',
-      home: HomePage(),
-    );
-  }
-}
-
-class HomePage extends StatefulWidget {
-  const HomePage({super.key});
-
-  @override
-  State<HomePage> createState() => _HomePageState();
-}
-
-class _HomePageState extends State<HomePage> {
-  final _future = Supabase.instance.client
-      .from('todos')
-      .select();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: FutureBuilder(
-        future: _future,
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final todos = snapshot.data!;
-          return ListView.builder(
-            itemCount: todos.length,
-            itemBuilder: ((context, index) {
-              final todo = todos[index];
-              return ListTile(
-                title: Text(todo['name']),
-              );
-            }),
-          );
-        },
-      ),
-    );
-  }
-}
 
 // ── Data model ────────────────────────────────────────────────────────────────
 
@@ -139,6 +92,125 @@ BoxDecoration _nsCardDecoration({Color? borderColor}) {
   );
 }
 
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final _userCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
+
+  String? _error;
+
+  void _login() {
+    if (_userCtrl.text.trim() == 'navicare.monitor' &&
+        _passCtrl.text.trim() == 'NaviCare2026') {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => const VitalSignsDashboard(),
+        ),
+      );
+    } else {
+      setState(() {
+        _error = 'Invalid username or password';
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _userCtrl.dispose();
+    _passCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _NS.bg,
+      body: Stack(
+        children: [
+          const _NsBackground(),
+          Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(28),
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: _nsCardDecoration(),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Image.asset(
+                      'assets/images/navisense-logo.png',
+                      height: 120,
+                      fit: BoxFit.contain,
+                    ),
+                    const SizedBox(height: 22),
+                    const Text(
+                      'NAVIcare Monitor',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 25,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    TextField(
+                      controller: _userCtrl,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(
+                        labelText: 'Username',
+                        labelStyle: TextStyle(color: _NS.textSub),
+                        prefixIcon: Icon(Icons.person, color: _NS.accent),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: _passCtrl,
+                      obscureText: true,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(
+                        labelText: 'Password',
+                        labelStyle: TextStyle(color: _NS.textSub),
+                        prefixIcon: Icon(Icons.lock, color: _NS.accent),
+                      ),
+                    ),
+                    if (_error != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        _error!,
+                        style: const TextStyle(color: Color(0xFFE63946)),
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _login,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _NS.accent.withOpacity(0.10),
+                          foregroundColor: _NS.accent,
+                          side: const BorderSide(color: Color(0x994CC9F0)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        child: const Text('Login'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class VitalSignsApp extends StatelessWidget {
   const VitalSignsApp({super.key});
 
@@ -192,7 +264,7 @@ class VitalSignsApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const VitalSignsDashboard(),
+      home: const LoginPage(),
     );
   }
 }
@@ -283,6 +355,18 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
   }
 
   Future<void> _connectBluetooth() async {
+    
+    const bool demoMode = true;
+
+    if (demoMode) {
+      setState(() {
+        _bluetoothConnected = true;
+        _bluetoothScanning = false;
+        _bluetoothStatus = 'Bluetooth: connected';
+      });
+      return;
+    }
+
     if (_bluetoothScanning) return;
 
     setState(() {
@@ -729,19 +813,11 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
         title: Row(
           children: [
             // Hexagonal NAVISense logo mark
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: _NS.accent, width: 1.5),
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1A0A6B), Color(0xFF0A0D2E)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: const Icon(Icons.sensors, color: _NS.accent, size: 16),
+            Image.asset(
+              'assets/images/navisense-logo.png',
+              width: 36,
+              height: 36,
+              fit: BoxFit.contain,
             ),
             const SizedBox(width: 10),
             RichText(
