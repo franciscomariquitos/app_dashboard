@@ -10,6 +10,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -149,14 +151,15 @@ class _LoginPageState extends State<LoginPage> {
                       fit: BoxFit.contain,
                     ),
                     const SizedBox(height: 22),
-                    const Text(
+                    Text(
                       'NAVIcare Monitor',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 25,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.8,
-                      ),
+                        style: const TextStyle(
+                          fontFamily: 'Syne',
+                          fontSize: 25,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                          letterSpacing: 0.8,
+                        ),
                     ),
                     const SizedBox(height: 24),
                     TextField(
@@ -216,7 +219,7 @@ class VitalSignsApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final baseTextTheme = GoogleFonts.soraTextTheme();
+    final baseTextTheme = ThemeData.dark().textTheme;
 
     return MaterialApp(
       title: 'NAVISense',
@@ -279,6 +282,13 @@ class VitalSignsDashboard extends StatefulWidget {
 }
 
 class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
+  final FlutterTts _tts = FlutterTts();
+  final stt.SpeechToText _speech = stt.SpeechToText();
+
+  bool _voiceAssistantEnabled = false;
+  bool _isListeningVoice = false;
+  String _lastVoiceCommand = '';
+
   final _rng = Random();
   final _uuid = const Uuid();
   final _supabase = Supabase.instance.client;
@@ -321,7 +331,9 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
   @override
   void initState() {
     super.initState();
+
     _initSigns();
+    _initVoiceAssistant();
     _initLocationTracking();
     _saveTrackerData(showFeedback: false);
 
@@ -345,27 +357,31 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
 
   @override
   void dispose() {
+    _tts.stop();
+    _speech.stop();
+
     _timer?.cancel();
     _syncTimer?.cancel();
     _positionSub?.cancel();
     _scanSub?.cancel();
     _bleSub?.cancel();
     _esp32Device?.disconnect();
+
     super.dispose();
   }
 
   Future<void> _connectBluetooth() async {
     
-    const bool demoMode = true;
+    const bool demoMode = false;
 
-    if (demoMode) {
+    /*if (demoMode) {
       setState(() {
         _bluetoothConnected = true;
         _bluetoothScanning = false;
         _bluetoothStatus = 'Bluetooth: connected';
       });
       return;
-    }
+    }*/
 
     if (_bluetoothScanning) return;
 
@@ -802,7 +818,252 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
     });
   }
 
+  Future<void> _initVoiceAssistant() async {
+    await Permission.microphone.request();
+
+    await _tts.setLanguage('pt-PT');
+    await _tts.setSpeechRate(0.48);
+    await _tts.setVolume(1.0);
+    await _tts.setPitch(1.0);
+
+    final available = await _speech.initialize(
+      onStatus: (status) {
+        debugPrint('VOICE STATUS: $status');
+
+        if (!mounted) return;
+
+        if (status == 'done' || status == 'notListening') {
+          setState(() {
+            _isListeningVoice = false;
+          });
+        }
+      },
+      onError: (error) {
+        debugPrint('VOICE ERROR: $error');
+
+        if (!mounted) return;
+
+        setState(() {
+          _isListeningVoice = false;
+          _voiceAssistantEnabled = false;
+        });
+
+        final msg = error.errorMsg.toString();
+
+        if (msg.contains('error_no_match')) {
+          _speak('Não percebi. Toque no microfone e tente novamente.');
+        } else if (msg.contains('error_network')) {
+          _speak('Erro de rede no reconhecimento de voz. Verifique a internet.');
+        } else {
+          _speak('Erro no reconhecimento de voz.');
+        }
+      },
+    );
+
+    debugPrint('VOICE AVAILABLE: $available');
+
+    final locales = await _speech.locales();
+    for (final locale in locales) {
+      debugPrint('VOICE LOCALE: ${locale.localeId} ${locale.name}');
+    }
+  }
+
+  Future<void> _speak(String text) async {
+    await _tts.stop();
+    await _tts.speak(text);
+  }
+
+  Future<void> _startVoiceListening() async {
+    if (_isListeningVoice) return;
+
+    final mic = await Permission.microphone.request();
+    if (!mic.isGranted) {
+      await _speak('Permissão de microfone negada.');
+      return;
+    }
+
+    if (!_speech.isAvailable) {
+      await _speak('Reconhecimento de voz indisponível neste dispositivo.');
+      return;
+    }
+
+    setState(() {
+      _voiceAssistantEnabled = true;
+      _isListeningVoice = true;
+    });
+
+    await _tts.stop();
+
+    await _speech.listen(
+      localeId: 'pt_PT',
+      listenFor: const Duration(seconds: 8),
+      pauseFor: const Duration(seconds: 2),
+      partialResults: true,
+      onResult: (result) {
+        final command = result.recognizedWords.toLowerCase().trim();
+
+        debugPrint('VOICE COMMAND: $command');
+
+        if (command.isEmpty) return;
+
+        setState(() {
+          _lastVoiceCommand = command;
+        });
+
+        final shouldExecute =
+            result.finalResult ||
+            command.contains('ajuda') ||
+            command.contains('comandos') ||
+            command.contains('estado') ||
+            command.contains('batimento') ||
+            command.contains('coração') ||
+            command.contains('bluetooth') ||
+            command.contains('colete') ||
+            command.contains('mapa') ||
+            command.contains('localização') ||
+            command.contains('guardar') ||
+            command.contains('pausar') ||
+            command.contains('retomar');
+
+        if (shouldExecute) {
+          _speech.stop();
+
+          if (mounted) {
+            setState(() {
+              _isListeningVoice = false;
+              _voiceAssistantEnabled = false;
+            });
+          }
+
+          _handleVoiceCommand(command);
+        }
+      },
+    );
+  }
+
+  Future<void> _stopVoiceListening() async {
+    await _speech.stop();
+    setState(() => _isListeningVoice = false);
+  }
+
+  void _toggleVoiceAssistant() {
+    if (_isListeningVoice) {
+      _stopVoiceListening();
+      setState(() {
+        _voiceAssistantEnabled = false;
+        _isListeningVoice = false;
+      });
+      _speak('Escuta cancelada.');
+      return;
+    }
+
+    _speak('Diga o comando.').then((_) {
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          _startVoiceListening();
+        }
+      });
+    });
+  }
+  void _handleVoiceCommand(String command) {
+    if (command.contains('comandos disponíveis') ||
+        command.contains('lista de comandos') ||
+        command.contains('ajuda')) {
+      _speakAvailableCommands();
+      return;
+    }
+
+    if (command.contains('estado') || command.contains('como estou')) {
+      _speakCurrentStatus();
+      return;
+    }
+
+    if (command.contains('batimento') ||
+        command.contains('frequência cardíaca') ||
+        command.contains('coração')) {
+      _speakHeartRate();
+      return;
+    }
+
+    if (command.contains('ligar bluetooth') ||
+        command.contains('conectar bluetooth') ||
+        command.contains('ligar colete')) {
+      _speak('A tentar ligar ao colete.');
+      _connectBluetooth();
+      return;
+    }
+
+    if (command.contains('desligar bluetooth') ||
+        command.contains('desligar colete')) {
+      _disconnectBluetooth();
+      _speak('Colete desligado.');
+      return;
+    }
+
+    if (command.contains('guardar dados') ||
+        command.contains('enviar dados')) {
+      _speak('A guardar dados.');
+      _saveTrackerData(showFeedback: false);
+      return;
+    }
+
+    if (command.contains('abrir mapa') ||
+        command.contains('mostrar localização')) {
+      _speak('A abrir localização no mapa.');
+      _openCurrentLocationInMaps();
+      return;
+    }
+
+    if (command.contains('pausar monitorização')) {
+      setState(() => _isMonitoring = false);
+      _speak('Monitorização pausada.');
+      return;
+    }
+
+    if (command.contains('retomar monitorização') ||
+        command.contains('continuar monitorização')) {
+      setState(() => _isMonitoring = true);
+      _speak('Monitorização retomada.');
+      return;
+    }
+
+    _speak(
+      'Comando não reconhecido. Diga comandos disponíveis para ouvir a lista.',
+    );
+  }
+
+  void _speakAvailableCommands() {
+    _speak(
+      'Comandos disponíveis: estado, batimento cardíaco, ligar bluetooth, desligar bluetooth, guardar dados, abrir mapa, pausar monitorização, retomar monitorização, e comandos disponíveis.',
+    );
+  }
+
+  void _speakCurrentStatus() {
+    final bluetooth = _bluetoothConnected ? 'ligado' : 'desligado';
+    final gps = _gpsReady ? 'ativo' : 'indisponível';
+
+    _speak(
+      'Estado geral: $_overallLabel. Bluetooth $bluetooth. GPS $gps.',
+    );
+  }
+
+  void _speakHeartRate() {
+    final sign = _signs.firstWhere((s) => s.name == 'Heart Rate');
+    final hr = sign.value.round();
+
+    final label = switch (sign.status) {
+      VitalStatus.normal => 'normal',
+      VitalStatus.warning => 'atenção',
+      VitalStatus.danger => 'crítico',
+    };
+
+    _speak(
+      'Batimento cardíaco atual: $hr batimentos por minuto. Estado: $label.',
+    );
+  }
+
   @override
+
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _NS.bg,
@@ -810,43 +1071,57 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
         backgroundColor: const Color(0xFF07092A),
         elevation: 0,
         titleSpacing: 16,
-        title: Row(
-          children: [
-            // Hexagonal NAVISense logo mark
-            Image.asset(
-              'assets/images/navisense-logo.png',
-              width: 36,
-              height: 36,
-              fit: BoxFit.contain,
-            ),
-            const SizedBox(width: 10),
-            RichText(
-              text: const TextSpan(
-                children: [
-                  TextSpan(
-                    text: 'NAVI',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 21,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                  TextSpan(
-                    text: 'Sense',
-                    style: TextStyle(
-                      color: _NS.accent,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 21,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                ],
+
+        title: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Row(
+            children: [
+              Image.asset(
+                'assets/images/navisense-logo.png',
+                width: 36,
+                height: 36,
+                fit: BoxFit.contain,
               ),
-            ),
-          ],
+              const SizedBox(width: 10),
+              RichText(
+                text: const TextSpan(
+                  children: [
+                    TextSpan(
+                      text: 'NAVI',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 21,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    TextSpan(
+                      text: 'Sense',
+                      style: TextStyle(
+                        color: _NS.accent,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 21,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
+
         actions: [
+          IconButton(
+            icon: Icon(
+              _voiceAssistantEnabled
+                  ? Icons.record_voice_over
+                  : Icons.mic_none,
+            ),
+            color: _voiceAssistantEnabled ? _NS.live : _NS.accent,
+            onPressed: _toggleVoiceAssistant,
+          ),
           IconButton(
             icon: Icon(
               _bluetoothConnected
@@ -920,7 +1195,7 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
                   padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: _signs.length == 1 ? 1 : 2,
-                    childAspectRatio: _signs.length == 1 ? 1.8 : 1.05,
+                    childAspectRatio: _signs.length == 1 ? 2.3 : 1.05,
                     crossAxisSpacing: 12,
                     mainAxisSpacing: 12,
                   ),
@@ -928,6 +1203,9 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
                   itemBuilder: (_, i) => _VitalCard(sign: _signs[i]),
                 ),
               ),
+
+              _buildVoiceAssistantCard(),
+
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
@@ -940,6 +1218,75 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+    Widget _buildVoiceAssistantCard() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(22),
+          onTap: _toggleVoiceAssistant,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+            decoration: _nsCardDecoration(
+              borderColor: _isListeningVoice
+                  ? _NS.live.withOpacity(0.75)
+                  : _NS.accent.withOpacity(0.75),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: _NS.accent.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: _isListeningVoice ? _NS.live : _NS.accent,
+                      width: 2,
+                    ),
+                  ),
+                  child: Icon(
+                    _isListeningVoice ? Icons.hearing : Icons.mic,
+                    color: _isListeningVoice ? _NS.live : _NS.accent,
+                    size: 42,
+                  ),
+                ),
+                const SizedBox(width: 18),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _isListeningVoice ? 'Listening...' : 'Voice Assistant',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _isListeningVoice
+                            ? 'Speak now'
+                            : 'Tap here and speak',
+                        style: const TextStyle(
+                          color: _NS.accent,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
