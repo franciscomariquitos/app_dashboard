@@ -910,6 +910,14 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
           _lastVoiceCommand = command;
         });
 
+        final isVibrationCommand =
+            command.contains('vibração') ||
+            command.contains('vibracao') ||
+            command.contains('intensidade') ||
+            command.contains('motor');
+
+        final hasVibrationValue = _extractVoicePercentage(command) != null;
+
         final shouldExecute =
             result.finalResult ||
             command.contains('ajuda') ||
@@ -919,6 +927,7 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
             command.contains('coração') ||
             command.contains('bluetooth') ||
             command.contains('colete') ||
+            (isVibrationCommand && hasVibrationValue) ||
             command.contains('mapa') ||
             command.contains('localização') ||
             command.contains('guardar') ||
@@ -973,7 +982,7 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
       return;
     }
 
-    if (command.contains('estado') || command.contains('como estou')) {
+      if (command.contains('estado') || command.contains('como estou') || command.contains('como estou?')) {
       _speakCurrentStatus();
       return;
     }
@@ -1020,6 +1029,22 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
       return;
     }
 
+    if (command.contains('vibração') ||
+        command.contains('vibracao') ||
+        command.contains('intensidade') ||
+        command.contains('motor')) {
+      final percent = _extractVoicePercentage(command);
+      if (percent == null) {
+        _speak('Indique a percentagem entre zero e cem.');
+        return;
+      }
+
+      setState(() => _motorIntensity = percent.toDouble());
+      _sendMotorIntensity(percent);
+      _speak('Intensidade da vibração ajustada para $percent por cento.');
+      return;
+    }
+
     if (command.contains('retomar monitorização') ||
         command.contains('continuar monitorização')) {
       setState(() => _isMonitoring = true);
@@ -1034,17 +1059,109 @@ class _VitalSignsDashboardState extends State<VitalSignsDashboard> {
 
   void _speakAvailableCommands() {
     _speak(
-      'Comandos disponíveis: estado, batimento cardíaco, ligar bluetooth, desligar bluetooth, guardar dados, abrir mapa, pausar monitorização, retomar monitorização, e comandos disponíveis.',
+      'Comandos disponíveis: estado, batimento cardíaco, ligar bluetooth, desligar bluetooth, guardar dados, abrir mapa, pausar monitorização, retomar monitorização, vibração setenta por cento, e comandos disponíveis.',
     );
+  }
+
+  int? _extractVoicePercentage(String command) {
+    final match = RegExp(r'(\d{1,3})').firstMatch(command);
+    if (match != null) {
+      final parsed = int.tryParse(match.group(1)!);
+      if (parsed != null) {
+        return parsed.clamp(0, 100).toInt();
+      }
+    }
+
+    final tokens = command
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-zà-ÿ0-9 ]', caseSensitive: false), ' ')
+        .split(RegExp(r'\s+'))
+        .where((t) => t.isNotEmpty)
+        .toList();
+
+    const units = {
+      'zero': 0,
+      'um': 1,
+      'uma': 1,
+      'dois': 2,
+      'duas': 2,
+      'tres': 3,
+      'quatro': 4,
+      'cinco': 5,
+      'seis': 6,
+      'sete': 7,
+      'oito': 8,
+      'nove': 9,
+    };
+
+    const teens = {
+      'dez': 10,
+      'onze': 11,
+      'doze': 12,
+      'treze': 13,
+      'catorze': 14,
+      'quatorze': 14,
+      'quinze': 15,
+      'dezasseis': 16,
+      'dezessete': 17,
+      'dezoito': 18,
+      'dezanove': 19,
+      'dezenove': 19,
+    };
+
+    const tens = {
+      'vinte': 20,
+      'trinta': 30,
+      'quarenta': 40,
+      'cinquenta': 50,
+      'sessenta': 60,
+      'setenta': 70,
+      'oitenta': 80,
+      'noventa': 90,
+    };
+
+    for (var i = 0; i < tokens.length; i++) {
+      final token = tokens[i];
+
+      if (token == 'cem' || token == 'cento') {
+        return 100;
+      }
+
+      final teen = teens[token];
+      if (teen != null) {
+        return teen;
+      }
+
+      final ten = tens[token];
+      if (ten != null) {
+        if (i + 2 < tokens.length &&
+            tokens[i + 1] == 'e' &&
+            units.containsKey(tokens[i + 2])) {
+          return (ten + units[tokens[i + 2]]!).clamp(0, 100).toInt();
+        }
+
+        if (i + 1 < tokens.length && units.containsKey(tokens[i + 1])) {
+          return (ten + units[tokens[i + 1]]!).clamp(0, 100).toInt();
+        }
+
+        return ten;
+      }
+
+      final unit = units[token];
+      if (unit != null) {
+        return unit;
+      }
+    }
+
+    return null;
   }
 
   void _speakCurrentStatus() {
     final bluetooth = _bluetoothConnected ? 'ligado' : 'desligado';
     final gps = _gpsReady ? 'ativo' : 'indisponível';
 
-    _speak(
-      'Estado geral: $_overallLabel. Bluetooth $bluetooth. GPS $gps.',
-    );
+      _speak('Estado geral: $_overallLabel. Bluetooth $bluetooth. GPS $gps.');
+      _speak('Última atualização: ${_lastUpdated.hour}:${_lastUpdated.minute}');
   }
 
   void _speakHeartRate() {
